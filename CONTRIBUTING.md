@@ -2,6 +2,11 @@
 
 Welcome to the **Secure AWS Network Architecture & Hybrid Connectivity** project team! To ensure a seamless collaboration and keep our codebase clean, all team members are expected to follow these guidelines.
 
+> **Note on Phase 0:** This repository was scaffolded during **Phase 0** (proposal, architecture
+> specification, and workspace setup), and those initial setup commits were made directly to
+> `main`. The branching and pull-request rules below govern **active development, starting with
+> the Week 1 implementation sprint.**
+
 ---
 
 ## 🌿 Branching Strategy

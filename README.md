@@ -2,7 +2,8 @@
 
 > **Program:** Digital Egypt Pioneers Initiative (DEPI)  
 > **Track:** AWS Security Cloud Computing  
-> **Status:** 🟢 Sprint 1 (Week 1: Core Network Foundation)  
+> **Status:** 🟡 Phase 0 — Project Proposal, Architecture Specification & Workspace Setup  
+> **IaC Status:** ⚪ Not yet deployed — Week 1 implementation is planned, not built  
 
 ---
 
@@ -11,6 +12,20 @@
 This repository hosts the graduation capstone project for the **AWS Security Cloud Computing Track** under the **Digital Egypt Pioneers Initiative (DEPI)**.
 
 Our team is designing and implementing a **Secure AWS Network Architecture with Hybrid Connectivity** modeled after enterprise-grade AWS Well-Architected Security principles. The goal is to build a reliable, segmented cloud network capable of securely interconnecting multiple environments, defending against web-layer threats, and detecting anomalous traffic.
+
+---
+
+## 🚦 Current State
+
+The team has completed **Phase 0**:
+
+- ✅ Project proposal and scope agreed
+- ✅ Target architecture specified — [`architecture/README.md`](architecture/README.md)
+- ✅ Week 1 design documented — [`docs/week-1-vpc-core.md`](docs/week-1-vpc-core.md)
+- ✅ Repository workspace scaffolded (`docs/`, `terraform/`, `architecture/`, `.github/`)
+- ⚪ **Terraform implementation: not started.** `terraform/` contains directory structure only.
+
+**No infrastructure has been provisioned. No AWS resources exist yet.**
 
 ---
 
@@ -24,13 +39,13 @@ flowchart TB
         CF["CloudFront & Route 53"] --> WAF["AWS WAF"]
     end
 
-    subgraph Core_VPC[" ☁️ Core VPC Environment (Active Focus: Week 1) "]
+    subgraph Core_VPC[" ☁️ Core VPC Environment (Week 1 focus) "]
         ALB["Application Load Balancer"]
         subgraph Subnets["Multi-AZ Subnets"]
             direction TB
             Pub["Public Subnets (ALB & NAT)"]
             App["Private App Subnets (EC2)"]
-            DB["Isolated Database Subnets (RDS)"]
+            DB["Isolated Data Subnets (RDS)"]
         end
         ALB --> App
         App --> DB
@@ -51,47 +66,53 @@ flowchart TB
 
 ---
 
-## 🚀 Current Milestone: Week 1 - Core VPC Foundation
+## 🚀 Next Milestone: Week 1 — Core VPC Foundation
 
-We are currently in **Week 1**, focusing on laying down a solid, compliant network foundation before introducing routing hubs or edge defenses.
+Week 1 implements the network foundation described in [`docs/week-1-vpc-core.md`](docs/week-1-vpc-core.md).
 
 ### 📋 Week 1 Objectives & Deliverables
-- [ ] **IP Addressing & CIDR Design:** Finalize non-overlapping CIDR block planning (`10.0.0.0/16`) across 2 Availability Zones.
+- [ ] **IP Addressing & CIDR Design:** `10.0.0.0/16` across 2 Availability Zones, with a documented allocation rule and reserved AZ-C blocks.
 - [ ] **Multi-Tier Subnet Segmentation:**
-  - Public Subnets for ingress load balancers and NAT gateways.
+  - Public Subnets for the ingress load balancer and NAT gateways.
   - Private Application Subnets for compute workloads.
-  - Isolated Database Subnets with no default route to the internet.
-- [ ] **Ingress & Egress Controls:** Configure Internet Gateways (IGW) and managed NAT Gateways.
-- [ ] **Least-Privilege Security Groups:** Establish strict chaining rules (ALB ➔ App Tier ➔ Database Tier).
-- [ ] **Secure Management Plane:** Eliminate public bastion jump-boxes and direct SSH port 22 access by adopting **AWS Systems Manager (SSM) Session Manager**.
-- [ ] **Initial IaC Implementation:** Structure and review initial Terraform modules for the baseline VPC.
+  - Isolated Data Subnets with no default route to the internet.
+- [ ] **Ingress & Egress Controls:** Internet Gateway (IGW) and managed NAT Gateways.
+- [ ] **Least-Privilege Security Groups:** Strict chain `sg-alb` ➔ `sg-app` ➔ `sg-data`.
+- [ ] **Secure Management Plane:** Eliminate public bastion jump-boxes and direct SSH port 22 access by adopting **AWS Systems Manager (SSM) Session Manager** over NAT.
+- [ ] **Initial IaC Implementation:** Terraform module `01-vpc-core` — **planned, not yet written.**
 
 ---
 
 ## 🗺️ Project Roadmap (High-Level Phases)
 
-Detailed deliverables for upcoming weeks will be added iteratively as we progress:
+| Phase | Milestone | Focus Area | Design | Implemented |
+| :---: | :--- | :--- | :---: | :---: |
+| **Phase 0** | **Proposal & Architecture** | Scope, target architecture, workspace setup | ✅ | ✅ docs + repo |
+| **Week 1** | **Core VPC Foundation** | Multi-AZ Subnets, Routing, NAT, Security Groups & SSM | ✅ | ⚪ Planned |
+| **Week 2** | **Hybrid Connectivity & Hub Routing** | AWS Transit Gateway, Site-to-Site VPN, VPC Endpoints | ✅ | ⚪ Planned |
+| **Week 3** | **Edge Security & Application Protection** | Amazon CloudFront, AWS WAF, Route 53, ACM | ✅ | ⚪ Planned |
+| **Week 4** | **Observability & Incident Response** | VPC Flow Logs, Athena Analytics & Host Isolation | ✅ | ⚪ Planned |
 
-| Phase | Milestone | Focus Area | Status |
-| :---: | :--- | :--- | :---: |
-| **Week 1** | **Core VPC Foundation** | Multi-AZ Subnets, Routing, NAT, Security Groups & SSM | 🟡 **In Progress** |
-| **Week 2** | **Hybrid Connectivity & Hub Routing** | AWS Transit Gateway, Site-to-Site VPN, VPC Endpoints | ⚪ Upcoming |
-| **Week 3** | **Edge Security & Application Protection** | Amazon CloudFront, AWS WAF Rulesets, Route 53 | ⚪ Upcoming |
-| **Week 4** | **Observability & Incident Response** | VPC Flow Logs, Athena Analytics & Host Isolation | ⚪ Upcoming |
+> **Design vs. Implemented** are tracked separately on purpose: the architecture has been
+> specified ahead of the build, but no Terraform has been applied.
 
 ---
 
 ## 📁 Repository Structure
 
-The workspace is organized to support clean, modular development as the project expands:
-
 ```text
 depi-aws-network-architecture/
-├── docs/             # Sprint planning, design notes, and architecture specs
-├── terraform/        # Infrastructure as Code (Terraform) workspace
-├── .gitignore        # Standard ignore rules for Terraform and AWS credentials
-├── CONTRIBUTING.md   # Team collaboration and branch conventions
-└── README.md         # Project overview and active milestone tracker
+├── .github/                 # Pull request template (CI added once Terraform lands)
+├── architecture/            # Target architecture spec & CIDR allocation plan
+│   └── diagrams/            # Network diagrams (to be added)
+├── docs/                    # Sprint deliverables & design notes
+│   └── week-1-vpc-core.md
+├── terraform/               # Infrastructure as Code workspace
+│   ├── environments/        # Root modules per environment (dev/, prod/)
+│   └── modules/             # Reusable modules (01-vpc-core/, …)
+├── .gitignore               # Terraform & AWS credential ignore rules
+├── CONTRIBUTING.md          # Team collaboration and branch conventions
+└── README.md                # Project overview and milestone tracker
 ```
 
 ---
@@ -102,6 +123,7 @@ To ensure smooth collaboration across the team:
 - The `main` branch tracks verified, review-approved milestones.
 - Work for the current sprint is developed in feature branches (e.g., `feat/week-1-vpc-subnets`).
 - Each feature must be tested and reviewed before merging into `main`.
+- See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch naming, commit conventions, and the PR process.
 
 ---
 

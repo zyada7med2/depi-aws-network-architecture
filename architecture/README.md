@@ -1,59 +1,100 @@
 # Architecture Specification & Network Design
 
-This directory contains the detailed network diagrams, CIDR address allocation plans, and routing policies for the **Secure AWS Network Architecture & Hybrid Connectivity** capstone project.
+> **Status: Target State (multi-phase).** This document specifies the *complete* intended
+> architecture across all four sprints. Only the **Week 1** subset is implemented so far —
+> see [`docs/week-1-vpc-core.md`](../docs/week-1-vpc-core.md) for what is actually built.
+> Anything marked _(Week N)_ below is design intent, not a deployed resource.
+
+This directory contains the network design, CIDR address allocation plan, and routing policies
+for the **Secure AWS Network Architecture & Hybrid Connectivity** capstone project.
 
 ---
 
-## 🌐 CIDR IP Allocation Table
+## 🌐 CIDR Address Allocation
 
-| Network Zone | AWS / Physical Entity | CIDR Block | Purpose / Workload |
+### Global address plan
+
+| Network | AWS / Physical entity | CIDR | Phase |
 | :--- | :--- | :--- | :--- |
-| **Spoke VPC 1 (Prod)** | AWS VPC (`us-east-1`) | `10.0.0.0/16` | Main enterprise workload hosting ALB, App servers, and Database |
-| ├── Public Subnet AZ-A | Subnet | `10.0.1.0/24` | Internet-facing ALB & NAT Gateway AZ-1 |
-| ├── Public Subnet AZ-B | Subnet | `10.0.2.0/24` | Internet-facing ALB & NAT Gateway AZ-2 |
-| ├── Private App AZ-A | Subnet | `10.0.10.0/24` | Application compute tier (EC2 instances managed by SSM) |
-| ├── Private App AZ-B | Subnet | `10.0.20.0/24` | Application compute tier (Multi-AZ redundancy) |
-| ├── Private DB AZ-A | Subnet | `10.0.30.0/24` | Primary Amazon RDS database tier (No Internet Egress) |
-| └── Private DB AZ-B | Subnet | `10.0.40.0/24` | Secondary/Replica Amazon RDS database tier |
-| **Spoke VPC 2 (Sec/Shared)** | AWS VPC (`us-east-1`) | `10.1.0.0/16` | Centralized security, inspection, and VPC Endpoints |
-| ├── Endpoints Subnet | Subnet | `10.1.10.0/24` | AWS PrivateLink Interface Endpoints (SSM, Secrets, S3) |
-| └── Inspection Subnet | Subnet | `10.1.20.0/24` | Traffic mirroring target & packet capture analyzers |
-| **Simulated On-Premises** | Corporate Network | `192.168.0.0/16` | Customer Gateway (CGW) connected via IPsec Site-to-Site VPN |
+| **Primary Workload VPC** | AWS VPC (`us-east-1`) | `10.0.0.0/16` | Week 1 |
+| **Shared Services / Security VPC** | AWS VPC (`us-east-1`) | `10.1.0.0/16` | Week 2 |
+| **Simulated On-Premises** | Corporate network | `192.168.0.0/16` | Week 2 |
+
+These three ranges do not overlap, which is a precondition for Transit Gateway routing.
+
+### Primary VPC subnet rule
+
+The third octet encodes the tier; the fourth octet encodes the Availability Zone. New subnets
+are derived from the rule rather than chosen ad hoc.
+
+| Third octet | Tier |
+| :--- | :--- |
+| `0–9`   | Public / ingress |
+| `10–19` | Private application |
+| `20–29` | Isolated data |
+| `250–255` | Transit (Transit Gateway attachment) |
+
+Fourth octet: `0` = AZ-A, `1` = AZ-B, `2` = AZ-C (reserved).
+
+### Primary VPC subnets
+
+| Network zone | AZ-A | AZ-B | AZ-C (reserved) | Phase |
+| :--- | :--- | :--- | :--- | :--- |
+| Public (ALB + NAT) | `10.0.0.0/24` | `10.0.1.0/24` | `10.0.2.0/24` | Week 1 |
+| Private application | `10.0.10.0/24` | `10.0.11.0/24` | `10.0.12.0/24` | Week 1 |
+| Isolated data (RDS) | `10.0.20.0/24` | `10.0.21.0/24` | `10.0.22.0/24` | Week 1 |
+| Transit (TGW attachment) | `10.0.250.0/24` | `10.0.251.0/24` | `10.0.252.0/24` | Week 2 |
+
+### Shared Services VPC subnets _(Week 2)_
+
+| Subnet | CIDR | Purpose |
+| :--- | :--- | :--- |
+| Endpoints | `10.1.10.0/24` | AWS PrivateLink interface endpoints (SSM, Secrets Manager, S3) |
+| Inspection | `10.1.20.0/24` | Traffic mirroring target & packet capture analyzers |
+
+> Future spoke VPCs are **independent VPCs** with their own CIDRs (e.g. `10.2.0.0/16`), not
+> carved out of the primary VPC's `10.0.0.0/16`. The `10.0.250.0/24`–`10.0.252.0/24` blocks are
+> Transit Gateway *attachment* subnets **inside** the primary VPC.
 
 ---
 
-## 🔀 Transit Gateway Routing & Segmentation
+## 🔀 Transit Gateway Routing & Segmentation _(Week 2 — design intent)_
 
-The AWS Transit Gateway acts as the central hub interconnecting all networks while maintaining strict segmentation:
+The AWS Transit Gateway acts as the central hub interconnecting all networks while maintaining
+strict segmentation:
 
-### Route Table Associations & Propagations
-1. **Production TGW Route Table (`tgw-rt-prod`):**
-   - Associated with: Production VPC Attachment.
+### Route table associations & propagations
+
+1. **Production TGW route table (`tgw-rt-prod`):**
+   - Associated with: Production VPC attachment.
    - Routes:
-     - `10.1.0.0/16` ➔ Spoke VPC 2 (Shared Services & Endpoints).
-     - `192.168.0.0/16` ➔ Site-to-Site VPN Attachment (Corporate).
-     - `0.0.0.0/0` ➔ Blackholed or routed to Central Egress inspection.
+     - `10.1.0.0/16` ➔ Shared Services VPC attachment.
+     - `192.168.0.0/16` ➔ Site-to-Site VPN attachment (corporate).
+     - `0.0.0.0/0` ➔ **Blackholed by default.** Once the central egress inspection path exists
+       in the Shared Services VPC, this route is repointed there. Until then, the production
+       VPC has no Transit Gateway internet egress.
 
-2. **Security & Shared Services Route Table (`tgw-rt-shared`):**
-   - Associated with: Shared Services VPC Attachment.
-   - Routes propagated from Production VPC and VPN Attachment.
+2. **Security & Shared Services route table (`tgw-rt-shared`):**
+   - Associated with: Shared Services VPC attachment.
+   - Routes propagated from the Production VPC and the VPN attachment.
 
-3. **VPN / On-Premises Route Table (`tgw-rt-vpn`):**
-   - Associated with: IPsec Site-to-Site VPN Attachment.
-   - Only propagates access to permitted private subnets (`10.0.10.0/24`, `10.0.20.0/24`).
+3. **VPN / On-Premises route table (`tgw-rt-vpn`):**
+   - Associated with: IPsec Site-to-Site VPN attachment.
+   - Propagates access only to the permitted private subnets
+     (`10.0.10.0/24`, `10.0.11.0/24`).
 
 ---
 
 ## 🛡️ Defense-in-Depth Layering
 
 ```
-[ Layer 7 - Edge ]      CloudFront + AWS WAF (OWASP Top 10, Rate Limits)
+[ Layer 7 - Edge ]      CloudFront + AWS WAF (OWASP Top 10, rate limits)   (Week 3)
        ▼
-[ Layer 4 - Ingress ]   Internet-Facing Application Load Balancer (ALB)
+[ Layer 4 - Ingress ]   Internet-Facing Application Load Balancer (ALB)    (Week 1, HTTP)
        ▼
-[ Layer 3/4 - Compute ] Private App Subnet (Security Group allows ingress only from ALB)
+[ Layer 3/4 - Compute ] Private App Subnet (ingress only from sg-alb)      (Week 1)
        ▼
-[ Layer 3/4 - Storage ] Private RDS Subnet (Security Group allows ingress only from App SG)
+[ Layer 3/4 - Storage ] Isolated Data Subnet (ingress only from sg-app)    (Week 1)
        ▼
-[ Control Plane ]       Zero SSH ports open (0.0.0.0/0:22 blocked). Access via AWS SSM.
+[ Control Plane ]       Zero SSH ports open. Access via AWS SSM Session Manager.
 ```
